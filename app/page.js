@@ -31,7 +31,7 @@ function EmptyState({ onUpload, busy }) {
       <div className="upload-mark">TL</div>
       <p className="eyebrow">One workbook. One truck.</p>
       <h2>Turn raw packing data into a reviewed truck list.</h2>
-      <p>Upload the raw Excel workbook. The app preserves identifiers, flags literal null values, recalculates classifications, and prepares all three required outputs.</p>
+      <p>Upload the raw Excel workbook. The app preserves identifiers, applies the column F/G null-review rules, recalculates classifications, and prepares all three required outputs.</p>
       <label className={`upload-button ${busy ? "disabled" : ""}`}>
         {busy ? "Reading workbook…" : "Choose raw Excel file"}
         <input type="file" accept=".xlsx" onChange={onUpload} disabled={busy} />
@@ -71,7 +71,7 @@ function ReviewPanel({ model, setModel }) {
         <div><p className="eyebrow">Blocking review</p><h2>{pending.length.toLocaleString()} decisions remaining</h2></div>
         <button className="button secondary danger" onClick={approveAll}>Approve all as blank</button>
       </div>
-      <p className="panel-note">Empty cells are allowed. Literal null values require a decision; bulk approval is explicit and auditable. Customer-name corrections are applied to every row in the matching deal.</p>
+      <p className="panel-note">Column F nulls are always reviewed. Column G nulls are reviewed only when F is missing. Empty cells and nulls in other columns are allowed. Customer-name corrections apply across the matching deal.</p>
       <div className="review-list">
         {visible.map((item) => {
           const row = model.rows.find((candidate) => candidate.id === item.rowId);
@@ -172,7 +172,13 @@ export default function Home() {
             {tab === "Truck list" && <><div className="legend">{Object.entries(FILLS).map(([name, fill]) => <span key={name}><i style={{ background: fill }} />{name.replace(/([A-Z])/g, " $1")}</span>)}</div><TruckTable preview={preview} /></>}
             {tab === "Pallets" && <PalletPanel preview={preview} />}
           </section>
-          <footer className="export-bar"><div><strong>{preview.canExport ? "Exports ready" : "Exports locked"}</strong><span>{preview.canExport ? "All review decisions are recorded." : `${preview.pendingReviewCount.toLocaleString()} review items remain.`}</span></div><div className="export-actions"><button className="button secondary" disabled={!preview.canExport || busy} onClick={() => download(exportInventoryWorkbook)}>Inventory Excel</button><button className="button secondary" disabled={!preview.canExport || busy} onClick={() => download(exportTruckListPdf)}>Truck-list PDF</button><button className="button" disabled={!preview.canExport || busy} onClick={() => download(exportPalletPdf)}>Pallet PDF</button></div></footer>
+          <footer className={`export-bar ${preview.canExport ? "expanded" : "collapsed"}`}>
+            <div className="export-status">
+              <strong>{preview.canExport ? "Exports ready" : "Exports locked"}</strong>
+              <span>{preview.canExport ? "All review decisions are recorded." : `${preview.pendingReviewCount.toLocaleString()} review items remain.`}</span>
+            </div>
+            {preview.canExport && <div className="export-actions"><button className="button secondary" disabled={busy} onClick={() => download(exportInventoryWorkbook)}>Inventory Excel</button><button className="button secondary" disabled={busy} onClick={() => download(exportTruckListPdf)}>Truck-list PDF</button><button className="button" disabled={busy} onClick={() => download(exportPalletPdf)}>Pallet PDF</button></div>}
+          </footer>
         </div>
       )}
     </main>

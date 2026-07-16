@@ -43,7 +43,7 @@ The final output header names and order are exact and fixed; source lookup will 
 
 The raw workbook stores `Load Id`, `Customer PO`, references, line items, descriptions, and barcodes as strings. Several identifier-like source columns (`SO Order Number`, delivery/customer codes, positions, and quantities) are stored as integers, so the importer must stringify identifier fields immediately. Barcodes are strings up to 28 characters in this fixture. `Actual Ship Date` is stored as text. Quantities are integers.
 
-Literal `null` fixture counts that affect the final/review workflow are: `SO Reference A` 6, `SO Reference B` 34, `Floor ID` 53, and `Component Ordered` 49. Genuine empty cells, including the five empty barcodes, are allowed. The unused `SO Line Item Variant` is blank on all 591 rows and `SO Orig Variant` is blank on 57 rows; these do not require review. The raw file also contains 31 customer-placeholder rows containing `Renewal by Andersen`.
+The final null-review rule is column-specific: literal `null` in raw column F (`SO Reference A`) is always flagged; literal `null` in raw column G (`SO Reference B`) is flagged only when F on that row is empty or `null`. Literal `null` values in other columns and genuinely empty cells are allowed. The raw file also contains 31 customer-placeholder rows containing `Renewal by Andersen`.
 
 ## Existing formulas
 
@@ -85,7 +85,7 @@ The implementation follows the written rules in every conflict:
 - `Misc Pallet` becomes `Misc` per deal, and the summary label is `Misc Windows`; no miscellaneous-pallet capacity is calculated.
 - Oversized rows are excluded from standard and miscellaneous counts and never receive a pallet assignment.
 - Report titles use the uploaded truck date, not `TODAY()`.
-- Every literal `null` value becomes a blocking review item until corrected or explicitly approved; genuinely empty cells are allowed. Placeholder customer names are also surfaced for correction/review.
+- Literal `null` in raw column F always becomes a blocking review item. Literal `null` in raw column G is blocking only when F on the same row is missing. Empty cells and nulls in other columns are allowed. Placeholder customer names are also surfaced for correction/review.
 - Raw and transformed rows remain paired in the internal audit model.
 
 ## Fixture-specific findings and deterministic choices

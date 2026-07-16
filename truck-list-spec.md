@@ -42,7 +42,7 @@ Required engineering rules:
 * Preserve leading zeros.
 * Locate source columns by header names rather than fixed indexes.
 * Keep the original raw row and transformed row available for audit.
-* Every cell containing the literal text `null` must be corrected or explicitly approved; genuinely empty cells are allowed.
+* Literal `null` in raw column F must always be corrected or approved. Literal `null` in raw column G requires review only when F on that row is also empty or `null`. Empty cells and nulls in other columns are allowed.
 * One uploaded raw file represents one truck.
 * The written business rules override legacy spreadsheet formulas.
 * Keep business rules in configuration where practical.
@@ -56,7 +56,7 @@ Create acceptance tests covering:
 * Preservation of leading zeros
 * Preservation of full barcode values
 * Customer-name corrections applied across a deal
-* Every literal `null` value requiring correction or approval, while genuinely empty cells remain allowed
+* Column-F nulls always requiring review and column-G nulls requiring review only when F is missing
 * Service yellow overriding small-deal orange in column B
 * Small-deal orange remaining in column C
 * PN and OK producing dark-green column-F highlighting
@@ -91,7 +91,7 @@ The app should:
 
 ## 2. Literal Null Values Are Review Flags
 
-Every cell containing the literal text `null` (case-insensitive and ignoring surrounding spaces) is a red flag. Genuinely empty cells are allowed and do not require review. Customer placeholders are still flagged separately.
+Literal `null` in raw column F (`SO Reference A`) is always a red flag. Literal `null` in raw column G (`SO Reference B`) is a red flag only when F on the same row is also empty or `null`. Matching is case-insensitive and ignores surrounding spaces. Empty cells and nulls in other columns are allowed. Customer placeholders are still flagged separately.
 
 A flagged value does not always need to be replaced, but it must be reviewed before export.
 

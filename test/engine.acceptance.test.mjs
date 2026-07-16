@@ -79,12 +79,16 @@ test("applies customer-name corrections across every row in the matching deal", 
   assert.notEqual(corrected.rows[2].transformed.Name, "Smith,John");
 });
 
-test("allows genuinely blank cells but blocks literal null values until corrected or approved", () => {
-  const model = buildTruckModel([baseRecord({ "Floor ID": " null ", Barcodes: null, "SO Line Item Variant": "" })]);
+test("flags F nulls always and G nulls only when F is missing", () => {
+  const model = buildTruckModel([
+    baseRecord({ "SO Reference A": " null ", "SO Reference B": "null", "Floor ID": "null" }),
+    baseRecord({ "SO Position": 2, "SO Reference A": "Real Customer", "SO Reference B": "null" }),
+    baseRecord({ "SO Position": 3, "SO Reference A": "", "SO Reference B": "null" }),
+  ]);
   assert.equal(canExport(model), false);
-  assert.ok(model.reviewItems.some((item) => item.sourceColumn === "Floor ID"));
-  assert.ok(!model.reviewItems.some((item) => item.sourceColumn === "Barcodes"));
-  assert.ok(!model.reviewItems.some((item) => item.sourceColumn === "SO Line Item Variant"));
+  assert.equal(model.reviewItems.filter((item) => item.sourceColumn === "SO Reference A").length, 1);
+  assert.equal(model.reviewItems.filter((item) => item.sourceColumn === "SO Reference B").length, 2);
+  assert.ok(!model.reviewItems.some((item) => item.sourceColumn === "Floor ID"));
   const reviewed = model.reviewItems.reduce(
     (current, item) => applyReviewDecision(current, item.id, { action: "approveBlank" }),
     model,

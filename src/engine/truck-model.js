@@ -88,9 +88,14 @@ function reviewItem(row, sourceColumn, kind, originalValue) {
 function buildReviewItems(rows, rules) {
   const items = [];
   for (const row of rows) {
-    for (const sourceColumn of SOURCE_HEADERS) {
-      const value = row.original[sourceColumn];
-      if (isBlankEquivalent(value, rules)) items.push(reviewItem(row, sourceColumn, "nullToken", value));
+    const columnF = row.original["SO Reference A"];
+    const columnG = row.original["SO Reference B"];
+    const columnFIsMissing = !normalizedText(columnF) || isBlankEquivalent(columnF, rules);
+    if (isBlankEquivalent(columnF, rules)) {
+      items.push(reviewItem(row, "SO Reference A", "nullToken", columnF));
+    }
+    if (isBlankEquivalent(columnG, rules) && columnFIsMissing) {
+      items.push(reviewItem(row, "SO Reference B", "nullToken", columnG));
     }
     if (isPlaceholderCustomer(row.original["SO Reference A"], rules)) {
       items.push(reviewItem(row, "SO Reference A", "placeholderCustomer", row.original["SO Reference A"]));
