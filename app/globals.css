@@ -11,6 +11,10 @@ button { cursor:pointer; }
 .brand div { display:flex; flex-direction:column; }
 .brand strong { letter-spacing:-.01em; }
 .brand small { color:var(--muted); margin-top:2px; }
+.header-actions { display:flex; align-items:center; gap:8px; }
+.clear-truck { border:0; background:transparent; color:#8b3a3a; padding:10px 12px; font-weight:750; }
+.clear-truck:hover { background:#fff0f0; border-radius:999px; }
+.clear-truck:disabled { opacity:.45; }
 .replace-file,.upload-button { position:relative; overflow:hidden; cursor:pointer; }
 .replace-file input,.upload-button input { position:absolute; inset:0; opacity:0; cursor:pointer; }
 .replace-file { border:1px solid var(--line); background:white; border-radius:999px; padding:10px 16px; font-weight:700; font-size:14px; }
@@ -24,6 +28,9 @@ h1,h2 { font-family:Georgia,"Times New Roman",serif; letter-spacing:-.035em; mar
 .upload-button:hover,.button:hover { background:var(--teal-dark); }
 .upload-button.disabled { opacity:.55; }
 .file-hint { margin-top:16px; color:#809198; font-size:12px; }
+.restore-state { width:min(420px,calc(100% - 32px)); margin:20vh auto; display:flex; align-items:center; justify-content:center; gap:14px; color:var(--muted); }
+.restore-spinner { width:22px; height:22px; border:3px solid #cfe1e1; border-top-color:var(--teal); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
 .error-banner,.warning-banner { width:min(1440px,92vw); margin:16px auto 0; padding:13px 16px; border-radius:10px; }
 .error-banner { background:#fee2e2; color:#8b2020; border:1px solid #fecaca; }
 .warning-banner { background:#fff5d8; color:#72530b; border:1px solid #ead8a1; }

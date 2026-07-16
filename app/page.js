@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { FILLS } from "../src/config/business-rules.js";
 import { importRawWorkbook } from "../src/engine/importer.js";
@@ -8,6 +8,7 @@ import { buildPreviewModel } from "../src/engine/preview.js";
 import { applyCustomerCorrection, applyReviewDecision, approveAllPendingAsBlank } from "../src/engine/truck-model.js";
 import { exportInventoryWorkbook } from "../src/export/excel.js";
 import { exportPalletPdf, exportTruckListPdf } from "../src/export/pdf.js";
+import { clearActiveTruck, loadActiveTruck, saveActiveTruck } from "../src/storage/truck-session.js";
 
 const TABS = ["Review", "Truck list", "Pallets"];
 
@@ -127,9 +128,24 @@ function PalletPanel({ preview }) {
 export default function Home() {
   const [model, setModel] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("Review");
   const preview = useMemo(() => model ? buildPreviewModel(model) : null, [model]);
+
+  useEffect(() => {
+    let active = true;
+    loadActiveTruck()
+      .then((savedModel) => { if (active && savedModel) setModel(savedModel); })
+      .catch(() => { if (active) setError("The previous truck could not be restored from browser storage."); })
+      .finally(() => { if (active) setRestoring(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (restoring || !model) return;
+    saveActiveTruck(model).catch(() => setError("Changes are working, but this browser could not save them for refresh recovery."));
+  }, [model, restoring]);
 
   const upload = async (event) => {
     const file = event.target.files?.[0];
@@ -155,11 +171,25 @@ export default function Home() {
     finally { setBusy(false); }
   };
 
+  const clearTruck = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await clearActiveTruck();
+      setModel(null);
+      setTab("Review");
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : "The saved truck could not be cleared.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main>
-      <header className="topbar"><div className="brand"><span>TL</span><div><strong>Truck List Maker</strong><small>Warehouse-ready, rule-driven exports</small></div></div><label className="replace-file">{model ? "Replace workbook" : "Upload workbook"}<input type="file" accept=".xlsx" onChange={upload} disabled={busy} /></label></header>
+      <header className="topbar"><div className="brand"><span>TL</span><div><strong>Truck List Maker</strong><small>Warehouse-ready, rule-driven exports</small></div></div><div className="header-actions">{model && <button className="clear-truck" onClick={clearTruck} disabled={busy}>Clear truck</button>}<label className="replace-file">{model ? "Replace workbook" : "Upload workbook"}<input type="file" accept=".xlsx" onChange={upload} disabled={busy || restoring} /></label></div></header>
       {error && <div className="error-banner"><strong>Couldn’t continue.</strong> {error}</div>}
-      {!model ? <EmptyState onUpload={upload} busy={busy} /> : (
+      {restoring ? <section className="restore-state"><div className="restore-spinner" /><strong>Restoring saved truck…</strong></section> : !model ? <EmptyState onUpload={upload} busy={busy} /> : (
         <div className="workspace">
           <section className="hero-strip">
             <div><p className="eyebrow">Truck date</p><h1>{preview.reportDate}</h1><p>{model.rows.length.toLocaleString()} source rows · {model.loadIds.length} detected load IDs · treated as one truck</p></div>
