@@ -1,0 +1,105 @@
+export const FINAL_HEADERS = [
+  "Job Order Number",
+  "Customer PO",
+  "Name",
+  "SO Order Number",
+  "Truck Ship Date",
+  "SO Line Item",
+  "Description",
+  "Order Qty",
+  "Delivered Qty",
+  "BO Qty",
+  "Floor ID",
+  "Component Ordered",
+  "Barcode",
+];
+
+export const SOURCE_HEADERS = [
+  "Delivery Code",
+  "SO Cust ID",
+  "Load Id",
+  "SO Order Number",
+  "Customer PO",
+  "SO Reference A",
+  "SO Reference B",
+  "Packing Slip ID",
+  "Actual Ship Date",
+  "SO Position",
+  "SO Sequence",
+  "SO Line Item",
+  "SO Line Item Variant",
+  "SO Orig Variant",
+  "SO Line Item Description",
+  "Order Qty",
+  "Delivered Qty",
+  "BO Qty",
+  "SO Units",
+  "Floor ID",
+  "Component Ordered",
+  "Recovery Flag",
+  "Serial Numbers",
+  "Barcodes",
+  "Carrier",
+];
+
+export const COLUMN_MAPPING = {
+  "Job Order Number": "SO Order Number",
+  "Customer PO": "Customer PO",
+  Name: "SO Reference A",
+  "SO Order Number": "SO Reference B",
+  "Truck Ship Date": "Actual Ship Date",
+  "SO Line Item": "SO Line Item",
+  Description: "SO Line Item Description",
+  "Order Qty": "Order Qty",
+  "Delivered Qty": "Delivered Qty",
+  "BO Qty": "BO Qty",
+  "Floor ID": "Floor ID",
+  "Component Ordered": "Component Ordered",
+  Barcode: "Barcodes",
+};
+
+export const SOURCE_TO_FINAL = Object.fromEntries(
+  Object.entries(COLUMN_MAPPING).map(([finalHeader, sourceHeader]) => [sourceHeader, finalHeader]),
+);
+
+export const IDENTIFIER_SOURCE_HEADERS = new Set([
+  "Delivery Code",
+  "SO Cust ID",
+  "Load Id",
+  "SO Order Number",
+  "Customer PO",
+  "SO Reference B",
+  "Packing Slip ID",
+  "SO Position",
+  "SO Sequence",
+  "SO Line Item",
+  "SO Line Item Variant",
+  "SO Orig Variant",
+  "Floor ID",
+  "Serial Numbers",
+  "Barcodes",
+  "Carrier",
+]);
+
+export const FILLS = {
+  serviceYellow: "#FFD966",
+  smallDealOrange: "#F4B183",
+  specialInteriorDarkGreen: "#548235",
+  patioDoorBlue: "#5B9BD5",
+  entryDoorLightGreen: "#A9D18E",
+  oversizedPurple: "#A64CA6",
+  backorderRed: "#FF6B6B",
+};
+
+export const BUSINESS_RULES = {
+  oversizedWidthThreshold: 54,
+  smallDealMaximumUnits: 3,
+  dedicatedPalletMinimumWindows: 5,
+  dedicatedPalletCapacity: 7,
+  windowComponentTokens: ["full"],
+  oversizedWindowTokens: ["GL", "DGB", "DGI", "GT", "CS", "PWU", "DBI", "SWU"],
+  oversizedWindowExclusions: ["NLGD", "FWG"],
+  recognizedOversizeTokens: ["-OVRSIZE-", "-OVERSIZE-"],
+  placeholderCustomerTokens: ["renewal by andersen"],
+  nullReviewTokens: ["null"],
+};
