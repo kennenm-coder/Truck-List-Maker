@@ -28,7 +28,7 @@ function drawCell(page, font, text, x, y, width, height, options = {}) {
 }
 
 export async function exportTruckListPdf(model) {
-  if (!canExport(model)) throw new Error("Resolve or approve every review item before export.");
+  if (!canExport(model)) throw new Error("Complete exception and oversized-measurement review before export.");
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -76,7 +76,7 @@ export async function exportTruckListPdf(model) {
 }
 
 export async function exportPalletPdf(model) {
-  if (!canExport(model)) throw new Error("Resolve or approve every review item before export.");
+  if (!canExport(model)) throw new Error("Complete exception and oversized-measurement review before export.");
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -107,15 +107,17 @@ export async function exportPalletPdf(model) {
     });
     y -= 17;
   }
-  const summaryY = Math.max(35, y - 68);
-  page.drawRectangle({ x: PAGE_MARGIN, y: summaryY, width: 360, height: 56, color: color("#EEF6F7"), borderColor: color("#9BBCC2"), borderWidth: 1 });
+  const summaryY = Math.max(35, y - 92);
+  page.drawRectangle({ x: PAGE_MARGIN, y: summaryY, width: 360, height: 80, color: color("#EEF6F7"), borderColor: color("#9BBCC2"), borderWidth: 1 });
   const summaryLines = [
     `Dedicated Pallets: ${model.palletSummary.dedicatedPallets}`,
     `Misc Windows: ${model.palletSummary.miscWindows}`,
     `Oversized Units Requiring Special Placement: ${model.palletSummary.oversizedUnits}`,
     `Total Windows: ${model.palletSummary.totalWindows}`,
+    `Patio Doors: ${model.palletSummary.patioDoorTotal}`,
+    `Entry Doors: ${model.palletSummary.entryDoorTotal}`,
   ];
-  summaryLines.forEach((line, index) => page.drawText(line, { x: PAGE_MARGIN + 10, y: summaryY + 42 - index * 12, font: index === 0 ? bold : regular, size: 9 }));
+  summaryLines.forEach((line, index) => page.drawText(line, { x: PAGE_MARGIN + 10, y: summaryY + 66 - index * 12, font: index === 0 ? bold : regular, size: 9 }));
   const bytes = await pdf.save();
   return {
     bytes,

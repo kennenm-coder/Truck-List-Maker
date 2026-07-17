@@ -6,7 +6,7 @@ import { canExport } from "../engine/truck-model.js";
 const argb = (hex) => `FF${hex.replace("#", "").toUpperCase()}`;
 
 export async function exportInventoryWorkbook(model) {
-  if (!canExport(model)) throw new Error("Resolve or approve every review item before export.");
+  if (!canExport(model)) throw new Error("Complete exception and oversized-measurement review before export.");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Truck List Maker";
   workbook.created = new Date();

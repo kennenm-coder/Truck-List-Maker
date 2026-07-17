@@ -6,6 +6,8 @@ export function buildPreviewModel(model) {
     warnings: [...model.warnings],
     canExport: canExport(model),
     pendingReviewCount: model.reviewItems.filter((item) => item.status === "pending").length,
+    oversizeReviewComplete: model.oversizeReviewStatus === "approved",
+    pendingMeasurementCount: model.rows.filter((row) => row.classification.isWindow && row.classification.extractedWidth == null).length,
     headers: [...model.finalHeaders],
     rows: model.rows.map((row) => ({
       id: row.id,

@@ -6,7 +6,7 @@ import {
   SOURCE_HEADERS,
   SOURCE_TO_FINAL,
 } from "../config/business-rules.js";
-import { extractWidth } from "./measurements.js";
+import { extractWidth, parseMeasurementToken } from "./measurements.js";
 
 const QUANTITY_HEADERS = new Set(["Order Qty", "Delivered Qty", "BO Qty"]);
 
@@ -59,6 +59,26 @@ function isWindow(row, rules) {
   return rules.windowComponentTokens.some((token) => component === token.toLowerCase());
 }
 
+function normalizedComponent(value) {
+  return normalizedText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isPatioDoorUnit(row, rules) {
+  const component = normalizedComponent(row.transformed["Component Ordered"]);
+  return rules.patioDoorComponentTokens.some((token) => component === normalizedComponent(token));
+}
+
+function isEntryDoorUnit(row, rules) {
+  const lineItem = normalizedText(row.transformed["SO Line Item"]).toUpperCase();
+  const component = normalizedComponent(row.transformed["Component Ordered"]);
+  return lineItem.startsWith("ED") && rules.entryDoorComponentTokens.some((token) => component === normalizedComponent(token));
+}
+
+function unitQuantity(row) {
+  const quantity = numericQuantity(row.transformed["Order Qty"]);
+  return quantity == null ? 1 : Math.max(0, quantity);
+}
+
 function ensureOversizeToken(description, oversized, rules) {
   const clean = asText(description).trim();
   if (!oversized) return clean;
@@ -100,9 +120,6 @@ function buildReviewItems(rows, rules) {
     if (isPlaceholderCustomer(row.original["SO Reference A"], rules)) {
       items.push(reviewItem(row, "SO Reference A", "placeholderCustomer", row.original["SO Reference A"]));
     }
-    if (isWindow(row, rules) && extractWidth(row.transformed.Description) == null) {
-      items.push(reviewItem(row, "SO Line Item Description", "measurement", row.original["SO Line Item Description"]));
-    }
   }
   return items;
 }
@@ -115,7 +132,8 @@ function classifyRows(rows, rules) {
     const row = clone(sourceRow);
     const customerPO = normalizedText(row.transformed["Customer PO"]);
     const soLineItem = normalizedText(row.transformed["SO Line Item"]);
-    const width = extractWidth(row.transformed.Description);
+    if (!("reviewedWidth" in row)) row.reviewedWidth = extractWidth(row.transformed.Description);
+    const width = row.reviewedWidth;
     const window = isWindow(row, rules);
     const oversized = window && productAllowsOversize(row, rules) && width != null && width > rules.oversizedWidthThreshold;
     row.transformed.Description = ensureOversizeToken(row.transformed.Description, oversized, rules);
@@ -127,6 +145,8 @@ function classifyRows(rows, rules) {
       hasSpecialInterior: upperLineItem.includes("PN") || upperLineItem.includes("OK"),
       isPatioDoor: upperLineItem.includes("PTD"),
       isEntryDoor: upperLineItem.trimStart().startsWith("ED"),
+      isPatioDoorUnit: isPatioDoorUnit(row, rules),
+      isEntryDoorUnit: isEntryDoorUnit(row, rules),
       isBackordered: numericQuantity(row.transformed["BO Qty"]) === 1,
       isWindow: window,
       extractedWidth: width,
@@ -184,6 +204,8 @@ function calculatePalletSummary(rows, rules) {
     miscWindows: dealList.reduce((sum, deal) => sum + (deal.assignment === "Misc" ? deal.standardWindowCount : 0), 0),
     oversizedUnits: dealList.reduce((sum, deal) => sum + deal.oversizedUnitCount, 0),
     totalWindows: dealList.reduce((sum, deal) => sum + deal.standardWindowCount + deal.oversizedUnitCount, 0),
+    patioDoorTotal: rows.reduce((sum, row) => sum + (row.classification.isPatioDoorUnit ? unitQuantity(row) : 0), 0),
+    entryDoorTotal: rows.reduce((sum, row) => sum + (row.classification.isEntryDoorUnit ? unitQuantity(row) : 0), 0),
   };
 }
 
@@ -204,9 +226,11 @@ function reportMetadata(rows) {
 
 export function recalculateTruck(model, rules = model.rules ?? BUSINESS_RULES) {
   const next = clone(model);
+  if (Array.isArray(next.reviewItems)) next.reviewItems = next.reviewItems.filter((item) => item.kind !== "measurement");
   next.rules = clone(rules);
   next.rows = classifyRows(next.rows.map((row) => ({ ...row, transformed: mapTransformed(row.working) })), rules);
   next.palletSummary = calculatePalletSummary(next.rows, rules);
+  next.oversizeReviewStatus = next.oversizeReviewStatus === "approved" ? "approved" : "pending";
   Object.assign(next, reportMetadata(next.rows));
   return next;
 }
@@ -222,6 +246,7 @@ export function buildTruckModel(rawRecords, options = {}) {
       original,
       working,
       transformed: mapTransformed(working),
+      reviewedWidth: extractWidth(working["SO Line Item Description"]),
       classification: {},
       styles: {},
     };
@@ -233,6 +258,7 @@ export function buildTruckModel(rawRecords, options = {}) {
     palletSummary: null,
     sourceHeaders: [...SOURCE_HEADERS],
     finalHeaders: [...FINAL_HEADERS],
+    oversizeReviewStatus: "pending",
   };
   model = recalculateTruck(model, rules);
   model.reviewItems = buildReviewItems(model.rows, rules);
@@ -240,7 +266,23 @@ export function buildTruckModel(rawRecords, options = {}) {
 }
 
 export function canExport(model) {
-  return model.reviewItems.every((item) => item.status !== "pending");
+  return model.reviewItems.every((item) => item.status !== "pending") && model.oversizeReviewStatus === "approved";
+}
+
+export function submitOversizeReview(model, widthByRowId = {}) {
+  const next = clone(model);
+  for (const row of next.rows) {
+    if (!row.classification.isWindow) continue;
+    if (Object.hasOwn(widthByRowId, row.id)) {
+      row.reviewedWidth = parseMeasurementToken(widthByRowId[row.id]);
+    }
+  }
+  const unresolved = next.rows.filter((row) => row.classification.isWindow && row.reviewedWidth == null);
+  if (unresolved.length) {
+    throw new Error(`${unresolved.length} window measurement${unresolved.length === 1 ? " is" : "s are"} still blank.`);
+  }
+  next.oversizeReviewStatus = "approved";
+  return recalculateTruck(next);
 }
 
 export function applyReviewDecision(model, reviewId, decision) {

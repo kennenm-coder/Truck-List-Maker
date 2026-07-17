@@ -97,6 +97,8 @@ export const BUSINESS_RULES = {
   dedicatedPalletMinimumWindows: 5,
   dedicatedPalletCapacity: 7,
   windowComponentTokens: ["full"],
+  patioDoorComponentTokens: ["pdfull"],
+  entryDoorComponentTokens: ["pku", "pkf"],
   oversizedWindowTokens: ["GL", "DGB", "DGI", "GT", "CS", "PWU", "DBI", "SWU"],
   oversizedWindowExclusions: ["NLGD", "FWG"],
   recognizedOversizeTokens: ["-OVRSIZE-", "-OVERSIZE-"],

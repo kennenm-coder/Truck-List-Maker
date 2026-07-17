@@ -5,15 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 import { FILLS } from "../src/config/business-rules.js";
 import { importRawWorkbook } from "../src/engine/importer.js";
 import { buildPreviewModel } from "../src/engine/preview.js";
-import { applyCustomerCorrection, applyReviewDecision, approveAllPendingAsBlank } from "../src/engine/truck-model.js";
+import { applyCustomerCorrection, applyReviewDecision, approveAllPendingAsBlank, recalculateTruck, submitOversizeReview } from "../src/engine/truck-model.js";
 import { exportInventoryWorkbook } from "../src/export/excel.js";
 import { exportPalletPdf, exportTruckListPdf } from "../src/export/pdf.js";
 import { clearActiveTruck, loadActiveTruck, saveActiveTruck } from "../src/storage/truck-session.js";
 
 const MODULES = [
   { id: "Review", code: "01", label: "Exception Review" },
-  { id: "Truck list", code: "02", label: "Truck Manifest" },
-  { id: "Pallets", code: "03", label: "Pallet Plan" },
+  { id: "Oversize", code: "02", label: "Oversized Review" },
+  { id: "Truck list", code: "03", label: "Truck Manifest" },
+  { id: "Pallets", code: "04", label: "Pallet Plan" },
 ];
 
 const FILTERS = ["All", "Service", "Oversized", "Backorder", "Small deal"];
@@ -48,7 +49,7 @@ function UploadScreen({ onUpload, busy }) {
   );
 }
 
-function ReviewPanel({ model, setModel, notify }) {
+function ReviewPanel({ model, setModel, notify, onContinue }) {
   const pending = model.reviewItems.filter((item) => item.status === "pending");
   const [selectedId, setSelectedId] = useState(pending[0]?.id ?? null);
   const [draft, setDraft] = useState("");
@@ -87,7 +88,7 @@ function ReviewPanel({ model, setModel, notify }) {
   };
 
   if (!pending.length) {
-    return <div className="release-state"><div className="release-mark">OK</div><div><span>REVIEW GATE CLEARED</span><h2>Truck package is ready for release.</h2><p>All exceptions have a recorded correction or approval. Open the manifest and pallet plan for a final check.</p></div></div>;
+    return <div className="release-state"><div className="release-mark">OK</div><div><span>EXCEPTION REVIEW CLEARED</span><h2>Continue to oversized review.</h2><p>All source exceptions have a recorded correction or approval.</p><button className="action-primary release-continue" onClick={onContinue}>REVIEW WINDOW WIDTHS</button></div></div>;
   }
 
   return (
@@ -119,6 +120,46 @@ function ReviewPanel({ model, setModel, notify }) {
   );
 }
 
+function OversizeReviewPanel({ model, setModel, notify }) {
+  const windows = model.rows.filter((row) => row.classification.isWindow);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [drafts, setDrafts] = useState(() => Object.fromEntries(windows.map((row) => [row.id, row.classification.extractedWidth ?? ""])));
+  const visible = windows.filter((row) => `${row.sourceRow} ${row.transformed["Customer PO"]} ${row.transformed.Name} ${row.transformed.Description}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const missing = windows.filter((row) => !String(drafts[row.id] ?? "").trim());
+
+  const updateWidth = (rowId, value) => {
+    setDrafts((current) => ({ ...current, [rowId]: value }));
+    setError("");
+    if (model.oversizeReviewStatus === "approved") setModel({ ...model, oversizeReviewStatus: "pending" });
+  };
+
+  const submit = () => {
+    try {
+      const reviewed = submitOversizeReview(model, drafts);
+      setModel(reviewed);
+      setError("");
+      notify(`Oversized review submitted - ${reviewed.palletSummary.oversizedUnits} oversized units`);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Width review could not be submitted.");
+    }
+  };
+
+  return <div className="oversize-review">
+    <div className="oversize-toolbar">
+      <div><span>WINDOW WIDTH REVIEW</span><strong>{windows.length} UNITS</strong></div>
+      <div className="oversize-search"><span>FIND</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Row, PO, customer, or description" /></div>
+      <div className={`measurement-status ${missing.length ? "has-missing" : ""}`}><strong>{missing.length}</strong><span>BLANK WIDTHS</span></div>
+      <button className="action-primary" disabled={missing.length > 0} onClick={submit}>{model.oversizeReviewStatus === "approved" ? "RESUBMIT REVIEW" : "SUBMIT REVIEW"}</button>
+    </div>
+    {error && <div className="oversize-error">{error}</div>}
+    <div className="measurement-table-wrap"><table className="measurement-table"><thead><tr><th>Width pulled (in.)</th><th>Item description</th><th>Source</th><th>Current result</th></tr></thead><tbody>{visible.map((row) => {
+      const blank = !String(drafts[row.id] ?? "").trim();
+      return <tr className={blank ? "measurement-missing" : ""} key={row.id}><td><input aria-label={`Width for source row ${row.sourceRow}`} value={drafts[row.id] ?? ""} onChange={(event) => updateWidth(row.id, event.target.value)} inputMode="decimal" placeholder="REQUIRED" /></td><td><strong>{row.transformed.Description}</strong><small>{row.transformed.Name} / PO {row.transformed["Customer PO"]}</small></td><td>ROW {row.sourceRow}</td><td><span className={row.classification.isOversized ? "result-oversized" : "result-standard"}>{row.classification.isOversized ? "OVERSIZED" : "STANDARD"}</span></td></tr>;
+    })}</tbody></table></div>
+  </div>;
+}
+
 function rowMatchesFilter(row, filter) {
   if (filter === "Service") return row.classification.isService;
   if (filter === "Oversized") return row.classification.isOversized;
@@ -148,7 +189,7 @@ function PalletPanel({ preview }) {
   const [query, setQuery] = useState("");
   const deals = summary.deals.filter((deal) => `${deal.customerName} ${deal.customerPO}`.toLowerCase().includes(query.trim().toLowerCase()));
   return <div className="pallet-view">
-    <div className="pallet-summary"><Metric label="DEDICATED PALLETS" value={summary.dedicatedPallets} /><Metric label="MISC WINDOWS" value={summary.miscWindows} /><Metric label="SPECIAL PLACEMENT" value={summary.oversizedUnits} alert /><Metric label="TOTAL WINDOWS" value={summary.totalWindows} /></div>
+    <div className="pallet-summary"><Metric label="DEDICATED PALLETS" value={summary.dedicatedPallets} /><Metric label="MISC WINDOWS" value={summary.miscWindows} /><Metric label="SPECIAL PLACEMENT" value={summary.oversizedUnits} alert /><Metric label="TOTAL WINDOWS" value={summary.totalWindows} /><Metric label="PATIO DOORS" value={summary.patioDoorTotal} /><Metric label="ENTRY DOORS" value={summary.entryDoorTotal} /></div>
     <div className="placement-alert"><div className="alert-code">OS</div><div><strong>{summary.oversizedUnits} OVERSIZED UNITS REQUIRE SPECIAL WAREHOUSE PLACEMENT</strong><span>These units are excluded from dedicated and miscellaneous pallet assignments.</span></div></div>
     <div className="data-toolbar pallet-toolbar"><div className="data-search"><span>FIND CUSTOMER / DEAL</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Customer name or PO" /></div><div className="record-count"><strong>{deals.length}</strong><span>DEALS SHOWN</span></div></div>
     <div className="table-shell pallet-table"><table><thead><tr><th>Customer name</th><th>Customer PO</th><th>Standard windows</th><th>Oversized units</th><th>Pallet assignment</th></tr></thead><tbody>{deals.map((deal) => <tr key={`${deal.customerPO}-${deal.customerName}`}><td>{deal.customerName}</td><td>{deal.customerPO}</td><td>{deal.standardWindowCount}</td><td className={deal.oversizedUnitCount ? "oversize-count" : ""}>{deal.oversizedUnitCount}</td><td><span className={`assignment ${deal.assignment ? "" : "special"}`}>{deal.assignment || "SPECIAL PLACEMENT"}</span></td></tr>)}</tbody></table></div>
@@ -172,7 +213,7 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    loadActiveTruck().then((savedModel) => { if (active && savedModel) setModel(savedModel); }).catch(() => { if (active) setError("The previous truck could not be restored from browser storage."); }).finally(() => { if (active) setRestoring(false); });
+    loadActiveTruck().then((savedModel) => { if (active && savedModel) setModel(recalculateTruck(savedModel)); }).catch(() => { if (active) setError("The previous truck could not be restored from browser storage."); }).finally(() => { if (active) setRestoring(false); });
     return () => { active = false; };
   }, []);
 
@@ -214,9 +255,9 @@ export default function Home() {
     {restoring ? <section className="restore-state"><div className="restore-spinner" /><strong>RESTORING LOCAL TRUCK SESSION</strong></section> : !model ? <UploadScreen onUpload={upload} busy={busy} /> : <>
       <section className="truck-command-bar"><div className="truck-id"><span>ACTIVE TRUCK</span><strong>{preview.reportDate}</strong><small>{model.rows.length.toLocaleString()} SOURCE ROWS · {model.loadIds.length} LOAD IDS · ONE TRUCK</small></div><div className="command-metrics"><Metric label="REVIEW OPEN" value={preview.pendingReviewCount} alert={preview.pendingReviewCount > 0} /><Metric label="PALLETS" value={preview.palletSummary.dedicatedPallets} /><Metric label="MISC WINDOWS" value={preview.palletSummary.miscWindows} /><Metric label="OVERSIZED" value={preview.palletSummary.oversizedUnits} alert /><Metric label="TOTAL WINDOWS" value={preview.palletSummary.totalWindows} /></div></section>
       {preview.warnings.map((warning) => <div className="system-message warning" key={warning}><strong>DATE CONFLICT</strong><span>{warning} Latest detected date selected.</span></div>)}
-      <nav className="module-nav">{MODULES.map((module) => <button className={tab === module.id ? "active" : ""} onClick={() => setTab(module.id)} key={module.id}><span>{module.code}</span><strong>{module.label}</strong>{module.id === "Review" && preview.pendingReviewCount > 0 && <b>{preview.pendingReviewCount}</b>}</button>)}</nav>
-      <section className="module-frame">{tab === "Review" && <ReviewPanel model={model} setModel={setModel} notify={notify} />}{tab === "Truck list" && <TruckTable preview={preview} />}{tab === "Pallets" && <PalletPanel preview={preview} />}</section>
-      <footer className={`release-drawer ${preview.canExport ? "open" : "locked"}`}><div className="release-status"><span>{preview.canExport ? "RELEASE GATE: CLEAR" : "RELEASE GATE: LOCKED"}</span><strong>{preview.canExport ? "EXPORT PACKAGE READY" : `${preview.pendingReviewCount} REVIEWS OPEN`}</strong></div>{preview.canExport && <div className="release-actions"><button disabled={busy} onClick={() => download(exportInventoryWorkbook)}><span>XLSX</span>INVENTORY UPLOAD</button><button disabled={busy} onClick={() => download(exportTruckListPdf)}><span>PDF</span>TRUCK MANIFEST</button><button className="release-primary" disabled={busy} onClick={() => download(exportPalletPdf)}><span>PDF</span>PALLET PLAN</button></div>}</footer>
+      <nav className="module-nav">{MODULES.map((module) => { const locked = module.id === "Oversize" && preview.pendingReviewCount > 0; return <button disabled={locked} className={`${tab === module.id ? "active" : ""} ${locked ? "locked" : ""}`} onClick={() => setTab(module.id)} key={module.id}><span>{module.code}</span><strong>{module.label}</strong>{module.id === "Review" && preview.pendingReviewCount > 0 && <b>{preview.pendingReviewCount}</b>}{module.id === "Oversize" && !preview.oversizeReviewComplete && !locked && <b>{preview.pendingMeasurementCount || "CHECK"}</b>}</button>; })}</nav>
+      <section className="module-frame">{tab === "Review" && <ReviewPanel model={model} setModel={setModel} notify={notify} onContinue={() => setTab("Oversize")} />}{tab === "Oversize" && <OversizeReviewPanel model={model} setModel={setModel} notify={notify} />}{tab === "Truck list" && <TruckTable preview={preview} />}{tab === "Pallets" && <PalletPanel preview={preview} />}</section>
+      <footer className={`release-drawer ${preview.canExport ? "open" : "locked"}`}><div className="release-status"><span>{preview.canExport ? "RELEASE GATE: CLEAR" : "RELEASE GATE: LOCKED"}</span><strong>{preview.canExport ? "EXPORT PACKAGE READY" : preview.pendingReviewCount > 0 ? `${preview.pendingReviewCount} REVIEWS OPEN` : "OVERSIZED REVIEW REQUIRED"}</strong></div>{preview.canExport && <div className="release-actions"><button disabled={busy} onClick={() => download(exportInventoryWorkbook)}><span>XLSX</span>INVENTORY UPLOAD</button><button disabled={busy} onClick={() => download(exportTruckListPdf)}><span>PDF</span>TRUCK MANIFEST</button><button className="release-primary" disabled={busy} onClick={() => download(exportPalletPdf)}><span>PDF</span>PALLET PLAN</button></div>}</footer>
     </>}
   </main>;
 }

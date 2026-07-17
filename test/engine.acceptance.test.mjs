@@ -8,6 +8,7 @@ import {
   buildTruckModel,
   canExport,
   recalculateTruck,
+  submitOversizeReview,
 } from "../src/engine/truck-model.js";
 
 const baseRecord = (overrides = {}) => ({
@@ -93,7 +94,8 @@ test("flags F nulls always and G nulls only when F is missing", () => {
     (current, item) => applyReviewDecision(current, item.id, { action: "approveBlank" }),
     model,
   );
-  assert.equal(canExport(reviewed), true);
+  assert.equal(canExport(reviewed), false);
+  assert.equal(canExport(submitOversizeReview(reviewed, {})), true);
 });
 
 test("enforces highlight precedence and exact classification rules", () => {
@@ -142,4 +144,36 @@ test("excludes oversized units from standard/misc counts and applies pallet thre
   assert.equal(summary.miscWindows, 4);
   assert.equal(summary.deals.find((deal) => deal.customerPO === "FIVE").dedicatedPallets, 1);
   assert.equal(summary.deals.find((deal) => deal.customerPO === "EIGHT").dedicatedPallets, 2);
+});
+
+test("counts one patio door from each pd-full component row and primary entry-door units only", () => {
+  const model = buildTruckModel([
+    baseRecord({ "SO Position": 1, "SO Line Item": "PTD PANEL", "Component Ordered": "pd_full", "Order Qty": 1 }),
+    baseRecord({ "SO Position": 2, "SO Line Item": "PTD FRAME", "Component Ordered": "frame", "Order Qty": 1 }),
+    baseRecord({ "SO Position": 3, "SO Line Item": "PTD PANEL", "Component Ordered": "PD-FULL", "Order Qty": 2 }),
+    baseRecord({ "SO Position": 4, "SO Line Item": "ED UNIT", "Component Ordered": "pku", "Order Qty": 1 }),
+    baseRecord({ "SO Position": 5, "SO Line Item": "ED FRAME", "Component Ordered": "pkf", "Order Qty": 1 }),
+    baseRecord({ "SO Position": 6, "SO Line Item": "ED TRIM", "Component Ordered": "ikt", "Order Qty": 1 }),
+  ]);
+  assert.equal(model.palletSummary.patioDoorTotal, 3);
+  assert.equal(model.palletSummary.entryDoorTotal, 2);
+});
+
+test("requires a submitted width review and rejects blank window measurements", () => {
+  const model = buildTruckModel([
+    baseRecord({ "SO Position": 1, "SO Line Item Description": "GL 54 X 70" }),
+    baseRecord({ "SO Position": 2, "SO Line Item Description": "GL SIZE UNKNOWN" }),
+  ]);
+  assert.equal(model.reviewItems.length, 0);
+  assert.equal(canExport(model), false);
+  assert.equal(model.rows[0].classification.extractedWidth, 54);
+  assert.equal(model.rows[1].classification.extractedWidth, null);
+  assert.throws(() => submitOversizeReview(model, {}), /measurement/i);
+
+  const reviewed = submitOversizeReview(model, { [model.rows[1].id]: "60" });
+  assert.equal(reviewed.oversizeReviewStatus, "approved");
+  assert.equal(reviewed.rows[0].classification.isOversized, false);
+  assert.equal(reviewed.rows[1].classification.extractedWidth, 60);
+  assert.equal(reviewed.rows[1].classification.isOversized, true);
+  assert.equal(canExport(reviewed), true);
 });

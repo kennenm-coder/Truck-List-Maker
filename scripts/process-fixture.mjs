@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { importRawWorkbook } from "../src/engine/importer.js";
-import { approveAllPendingAsBlank, canExport } from "../src/engine/truck-model.js";
+import { approveAllPendingAsBlank, canExport, submitOversizeReview } from "../src/engine/truck-model.js";
 import { exportInventoryWorkbook } from "../src/export/excel.js";
 import { exportPalletPdf, exportTruckListPdf } from "../src/export/pdf.js";
 
@@ -13,6 +13,7 @@ const source = await fs.readFile(sourcePath);
 let model = await importRawWorkbook(source);
 const pendingBeforeApproval = model.reviewItems.filter((item) => item.status === "pending").length;
 model = approveAllPendingAsBlank(model);
+model = submitOversizeReview(model, {});
 if (!canExport(model)) throw new Error("Fixture review did not reach an exportable state.");
 
 await fs.mkdir(outputDir, { recursive: true });
@@ -43,6 +44,8 @@ console.log(JSON.stringify({
     miscWindows: model.palletSummary.miscWindows,
     oversizedUnits: model.palletSummary.oversizedUnits,
     totalWindows: model.palletSummary.totalWindows,
+    patioDoorTotal: model.palletSummary.patioDoorTotal,
+    entryDoorTotal: model.palletSummary.entryDoorTotal,
   },
   outputs: outputs.map((output) => path.join(outputDir, output.fileName)),
 }, null, 2));

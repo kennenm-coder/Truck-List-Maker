@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
 
 import { FILLS } from "../src/config/business-rules.js";
 import { buildPreviewModel } from "../src/engine/preview.js";
-import { buildTruckModel } from "../src/engine/truck-model.js";
+import { buildTruckModel, submitOversizeReview } from "../src/engine/truck-model.js";
 import { exportInventoryWorkbook } from "../src/export/excel.js";
 import { exportPalletPdf, exportTruckListPdf } from "../src/export/pdf.js";
 
@@ -37,7 +37,7 @@ const records = [{
 }];
 
 test("Excel and both PDFs render the same classifications as the web preview", async () => {
-  const model = buildTruckModel(records);
+  const model = submitOversizeReview(buildTruckModel(records), {});
   const preview = buildPreviewModel(model);
   const excel = await exportInventoryWorkbook(model);
   const workbook = new ExcelJS.Workbook();
